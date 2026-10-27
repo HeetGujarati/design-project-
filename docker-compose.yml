@@ -1,0 +1,155 @@
+version: '3.9'
+
+services:
+  # ═══════════════════════════════════════════
+  # TIER 3: DATA LAYER
+  # ═══════════════════════════════════════════
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: sdsp_postgres
+    environment:
+      POSTGRES_DB: damage_seg
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-securepass123}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin -d damage_seg"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - sdsp_network
+
+  redis:
+    image: redis:7-alpine
+    container_name: sdsp_redis
+    ports:
+      - "6379:6379"
+    command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - sdsp_network
+
+  minio:
+    image: minio/minio:latest
+    container_name: sdsp_minio
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:-minioadmin123}
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - miniodata:/data
+    command: server /data --console-address ":9001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - sdsp_network
+
+  # MinIO bucket initializer
+  minio-init:
+    image: minio/mc:latest
+    container_name: sdsp_minio_init
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set local http://minio:9000 minioadmin minioadmin123;
+      mc mb local/damage-inspections --ignore-existing;
+      mc anonymous set download local/damage-inspections/results;
+      echo 'Bucket initialized successfully';
+      "
+    networks:
+      - sdsp_network
+
+  # ═══════════════════════════════════════════
+  # TIER 2: APPLICATION LAYER (FastAPI)
+  # ═══════════════════════════════════════════
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: sdsp_backend
+    ports:
+      - "8000:8000"
+    env_file: .env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    networks:
+      - sdsp_network
+
+  # ═══════════════════════════════════════════
+  # TIER 4: AI INFERENCE WORKERS (Celery)
+  # ═══════════════════════════════════════════
+
+  worker:
+    build:
+      context: ./worker
+      dockerfile: Dockerfile
+    env_file: .env
+    depends_on:
+      - redis
+      - minio
+      - postgres
+    volumes:
+      - ./worker:/app
+    deploy:
+      replicas: 2
+    command: celery -A tasks.celery_app worker --loglevel=info --concurrency=2 -n worker@%h
+    networks:
+      - sdsp_network
+
+  # ═══════════════════════════════════════════
+  # TIER 1: FRONTEND (Next.js Dashboard)
+  # ═══════════════════════════════════════════
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: sdsp_frontend
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+      - /app/.next
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8000
+      - NEXT_PUBLIC_WS_URL=ws://localhost:8000
+      - NEXT_PUBLIC_MINIO_URL=http://localhost:9000
+    command: npm run dev
+    networks:
+      - sdsp_network
+
+volumes:
+  pgdata:
+  miniodata:
+
+networks:
+  sdsp_network:
+    driver: bridge

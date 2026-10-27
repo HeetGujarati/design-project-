@@ -1,0 +1,54 @@
+# Dependencies
+node_modules/
+*/node_modules/
+
+# Next.js build & cache
+.next/
+*/.next/
+out/
+build/
+dist/
+
+# Environment variables & secrets
+.env
+.env*.local
+*.env
+
+# Python
+__pycache__/
+*/__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+ENV/
+*.egg-info/
+
+# PyTorch / ML weights / large checkpoints
+*.pt
+*.pth
+*.onnx
+*.bin
+training/data/raw/
+training/runs/
+runs/
+
+# IDE, Tools & Editor files
+.vscode/
+.idea/
+.aider-desk/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+

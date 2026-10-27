@@ -1,0 +1,12 @@
+celery[redis]==5.4.0
+redis[hiredis]==5.1.0
+ultralytics==8.3.0
+opencv-python-headless==4.10.0.84
+numpy==1.26.4
+Pillow==10.4.0
+minio==7.2.8
+sqlalchemy==2.0.32
+psycopg2-binary==2.9.9
+torch>=2.1.0
+torchvision>=0.16.0
+python-dotenv==1.0.1

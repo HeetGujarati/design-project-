@@ -1,0 +1,10 @@
+# YOLOv8 Dataset Configuration for Concrete Damage Segmentation
+# Blueprint requirement: Tier 3 AI Segmentation Models - Dataset configuration
+
+path: ./data
+train: images/train
+val: images/val
+test: images/val
+
+names:
+  0: damage
